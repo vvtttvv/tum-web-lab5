@@ -2,6 +2,7 @@
 
 const net = require("net");
 const tls = require("tls");
+const { createCacheKey, getCachedResponse, storeCachedResponse } = require("./cache");
 const { parseHttpResponse } = require("./response");
 
 const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
@@ -17,25 +18,26 @@ function normalizeUrl(input) {
   return parsed;
 }
 
-function createRawGetRequest(urlObj) {
+function createRawGetRequest(urlObj, options = {}) {
   const path = `${urlObj.pathname || "/"}${urlObj.search || ""}`;
   const hostHeader = urlObj.port ? `${urlObj.hostname}:${urlObj.port}` : urlObj.hostname;
+  const acceptHeader = options.acceptHeader || "text/html,application/json;q=0.9,*/*;q=0.8";
 
   return [
     `GET ${path} HTTP/1.1`,
     `Host: ${hostHeader}`,
     "User-Agent: go2web/0.1",
     "Connection: close",
-    "Accept: text/html,application/json;q=0.9,*/*;q=0.8",
+    `Accept: ${acceptHeader}`,
     "",
     "",
   ].join("\r\n");
 }
 
-function makeSocketRequest(urlObj, timeoutMs = 15000) {
+function makeSocketRequest(urlObj, timeoutMs = 15000, options = {}) {
   const isHttps = urlObj.protocol === "https:";
   const port = Number(urlObj.port) || (isHttps ? 443 : 80);
-  const requestText = createRawGetRequest(urlObj);
+  const requestText = createRawGetRequest(urlObj, options);
 
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -105,10 +107,17 @@ function resolveRedirectUrl(currentUrl, locationHeader) {
 async function fetchWithRedirects(initialUrl, options = {}) {
   const maxRedirects = Number.isFinite(options.maxRedirects) ? options.maxRedirects : 5;
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 15000;
+  const cacheEnabled = options.cacheEnabled !== false;
+  const fallbackTtlSeconds = Number.isFinite(options.cacheTtlSeconds)
+    ? options.cacheTtlSeconds
+    : 90;
+  const acceptHeader = options.acceptHeader || "text/html,application/json;q=0.9,*/*;q=0.8";
 
   let currentUrl = initialUrl;
   const visited = new Set();
   const redirectChain = [];
+  const requestTrace = [];
+  const cacheStats = { hits: 0, misses: 0, writes: 0 };
 
   for (let step = 0; step <= maxRedirects; step += 1) {
     const normalized = currentUrl.toString();
@@ -117,7 +126,38 @@ async function fetchWithRedirects(initialUrl, options = {}) {
     }
     visited.add(normalized);
 
-    const response = await makeSocketRequest(currentUrl, timeoutMs);
+    let response;
+    let fromCache = false;
+
+    const cacheKey = createCacheKey(currentUrl, acceptHeader);
+    if (cacheEnabled) {
+      const cached = await getCachedResponse(cacheKey);
+      if (cached) {
+        response = cached.response;
+        fromCache = true;
+        cacheStats.hits += 1;
+      } else {
+        cacheStats.misses += 1;
+      }
+    }
+
+    if (!response) {
+      response = await makeSocketRequest(currentUrl, timeoutMs, { acceptHeader });
+
+      if (cacheEnabled) {
+        const wrote = await storeCachedResponse(cacheKey, response, fallbackTtlSeconds);
+        if (wrote) {
+          cacheStats.writes += 1;
+        }
+      }
+    }
+
+    requestTrace.push({
+      url: currentUrl.toString(),
+      statusCode: response.statusCode,
+      fromCache,
+    });
+
     const locationHeader = response.headers.location;
 
     if (!REDIRECT_STATUS_CODES.has(response.statusCode)) {
@@ -125,6 +165,8 @@ async function fetchWithRedirects(initialUrl, options = {}) {
         response,
         finalUrl: currentUrl,
         redirectChain,
+        requestTrace,
+        cacheStats,
       };
     }
 

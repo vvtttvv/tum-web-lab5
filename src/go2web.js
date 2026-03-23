@@ -1,6 +1,7 @@
 "use strict";
 const { HELP_TEXT, parseArgs } = require("./cli/args");
 const { fetchWithRedirects, normalizeUrl } = require("./http/request");
+const { clearHttpCache } = require("./http/cache");
 const { decodeBodyToText } = require("./http/response");
 const { toHumanReadableText } = require("./output/text");
 const { searchTop10 } = require("./search/duckduckgo");
@@ -12,9 +13,11 @@ function printHelp() {
 
 async function fetchAndPrintReadableUrl(urlValue) {
   const urlObj = normalizeUrl(urlValue);
-  const { response, finalUrl, redirectChain } = await fetchWithRedirects(urlObj, {
+  const { response, finalUrl, redirectChain, cacheStats } = await fetchWithRedirects(urlObj, {
     maxRedirects: 7,
     timeoutMs: 15000,
+    cacheEnabled: true,
+    cacheTtlSeconds: 120,
   });
   const textBody = decodeBodyToText(response);
   const output = toHumanReadableText(textBody, response.headers["content-type"]);
@@ -28,6 +31,9 @@ async function fetchAndPrintReadableUrl(urlValue) {
 
   process.stdout.write(`HTTP ${response.statusCode} ${response.statusMessage}\n`);
   process.stdout.write(`Final URL: ${finalUrl.toString()}\n`);
+  process.stdout.write(
+    `Cache: hits=${cacheStats.hits} misses=${cacheStats.misses} writes=${cacheStats.writes}\n`
+  );
   process.stdout.write("\n");
   process.stdout.write(output);
   process.stdout.write("\n");
@@ -43,6 +49,12 @@ async function main(argv) {
 
   if (parsed.mode === "help") {
     printHelp();
+    return 0;
+  }
+
+  if (parsed.mode === "clear-cache") {
+    await clearHttpCache();
+    process.stdout.write("HTTP cache cleared.\n");
     return 0;
   }
 

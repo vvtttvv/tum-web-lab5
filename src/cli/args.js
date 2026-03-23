@@ -2,6 +2,7 @@
 
 const HELP_TEXT = `go2web -u <URL>         # make an HTTP request to the specified URL and print the response
 go2web -s <search-term> [--open <n>] # search term and print top 10 results, optionally open result by index
+go2web --clear-cache   # clear local HTTP cache
 go2web -h               # show this help`;
 
 function parseArgs(argv) {
@@ -10,16 +11,25 @@ function parseArgs(argv) {
   }
 
   const hasHelp = argv.includes("-h") || argv.includes("--help");
+  const hasClearCache = argv.includes("--clear-cache");
   const uIndex = argv.indexOf("-u");
   const sIndex = argv.indexOf("-s");
-  const modeCount = Number(hasHelp) + Number(uIndex !== -1) + Number(sIndex !== -1);
+  const modeCount =
+    Number(hasHelp) + Number(hasClearCache) + Number(uIndex !== -1) + Number(sIndex !== -1);
 
   if (modeCount > 1) {
-    return { error: "Error: use only one of -h, -u, or -s." };
+    return { error: "Error: use only one main mode at a time." };
   }
 
   if (hasHelp) {
     return { mode: "help" };
+  }
+
+  if (hasClearCache) {
+    if (argv.length > 1) {
+      return { error: "Error: --clear-cache does not accept extra arguments." };
+    }
+    return { mode: "clear-cache" };
   }
 
   if (uIndex !== -1) {
