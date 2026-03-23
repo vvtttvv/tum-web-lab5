@@ -3,6 +3,8 @@ const { HELP_TEXT, parseArgs } = require("./cli/args");
 const { makeSocketRequest, normalizeUrl } = require("./http/request");
 const { decodeBodyToText } = require("./http/response");
 const { toHumanReadableText } = require("./output/text");
+const { searchTop10 } = require("./search/duckduckgo");
+const { formatSearchResults } = require("./output/search");
 
 function printHelp() {
   process.stdout.write(`${HELP_TEXT}\n`);
@@ -40,9 +42,15 @@ async function main(argv) {
   }
 
   if (parsed.mode === "search") {
-    process.stdout.write(`[WIP] Search mode accepted: ${parsed.searchTerm}\n`);
-    process.stdout.write("Search implementation will be added in next commit.\n");
-    return 0;
+    try {
+      const results = await searchTop10(parsed.searchTerm);
+      const output = formatSearchResults(parsed.searchTerm, results);
+      process.stdout.write(`${output}\n`);
+      return 0;
+    } catch (error) {
+      process.stderr.write(`Search failed: ${error.message}\n`);
+      return 1;
+    }
   }
 
   process.stderr.write("Error: unsupported mode.\n");
