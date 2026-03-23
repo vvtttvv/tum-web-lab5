@@ -2,7 +2,7 @@
 const { HELP_TEXT, parseArgs } = require("./cli/args");
 const { makeSocketRequest, normalizeUrl } = require("./http/request");
 const { decodeBodyToText } = require("./http/response");
-const { normalizeConsoleText } = require("./output/text");
+const { toHumanReadableText } = require("./output/text");
 
 function printHelp() {
   process.stdout.write(`${HELP_TEXT}\n`);
@@ -26,7 +26,7 @@ async function main(argv) {
       const urlObj = normalizeUrl(parsed.url);
       const response = await makeSocketRequest(urlObj);
       const textBody = decodeBodyToText(response);
-      const output = normalizeConsoleText(textBody);
+      const output = toHumanReadableText(textBody, response.headers["content-type"]);
 
       process.stdout.write(`HTTP ${response.statusCode} ${response.statusMessage}\n`);
       process.stdout.write("\n");
