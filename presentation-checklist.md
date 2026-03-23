@@ -14,3 +14,6 @@
    - `node src/go2web.js --clear-cache`
    - `node src/go2web.js -u https://example.com`
    - `node src/go2web.js -u https://example.com`
+8. Show limit of redirections:
+   - `./go2web -u https://httpbin.org/redirect/10` 
+   

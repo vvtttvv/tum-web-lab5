@@ -123,7 +123,7 @@ async function clearHttpCache() {
   try {
     await fs.rm(CACHE_FILE, { force: true });
   } catch {
-    // Ignore file-system cleanup errors and keep in-memory cache cleared.
+    console.warn("Failed to clear cache file, but in-memory cache is reset.");
   }
 }
 

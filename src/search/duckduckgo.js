@@ -36,7 +36,7 @@ function decodeBingRedirectTarget(raw) {
       return decoded;
     }
   } catch {
-    // Keep fallback behavior below.
+    console.warn("Warning: failed to decode Bing redirect target, falling back to heuristic decoding.");
   }
 
   try {
@@ -45,7 +45,7 @@ function decodeBingRedirectTarget(raw) {
       return plain;
     }
   } catch {
-    // Keep fallback behavior below.
+    console.warn("Warning: failed to decode Bing redirect target, falling back to heuristic decoding.");
   }
 
   return "";
@@ -102,7 +102,7 @@ function parseBingResults(html, limit = 10) {
         snippet,
       });
     } catch {
-      // Skip malformed entries to keep output resilient.
+      console.warn("Warning: failed to parse a Bing search result, skipping.");
     }
   }
 
