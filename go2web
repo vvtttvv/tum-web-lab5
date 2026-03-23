@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+"use strict";
+
+require("./src/go2web").main(process.argv.slice(2));
