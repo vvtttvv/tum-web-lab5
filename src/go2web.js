@@ -7,20 +7,32 @@ const { toHumanReadableText } = require("./output/text");
 const { searchTop10 } = require("./search/duckduckgo");
 const { formatSearchResults } = require("./output/search");
 
+function resolveAcceptHeader(acceptMode) {
+  if (acceptMode === "html") {
+    return "text/html,*/*;q=0.7";
+  }
+  if (acceptMode === "json") {
+    return "application/json,*/*;q=0.7";
+  }
+  return "text/html,application/json;q=0.9,*/*;q=0.8";
+}
+
 function printHelp() {
   process.stdout.write(`${HELP_TEXT}\n`);
 }
 
-async function fetchAndPrintReadableUrl(urlValue) {
+async function fetchAndPrintReadableUrl(urlValue, acceptMode = "auto") {
   const urlObj = normalizeUrl(urlValue);
+  const acceptHeader = resolveAcceptHeader(acceptMode);
   const { response, finalUrl, redirectChain, cacheStats } = await fetchWithRedirects(urlObj, {
     maxRedirects: 7,
     timeoutMs: 15000,
     cacheEnabled: true,
     cacheTtlSeconds: 120,
+    acceptHeader,
   });
   const textBody = decodeBodyToText(response);
-  const output = toHumanReadableText(textBody, response.headers["content-type"]);
+  const output = toHumanReadableText(textBody, response.headers["content-type"], acceptMode);
 
   if (redirectChain.length > 0) {
     for (const hop of redirectChain) {
@@ -31,6 +43,7 @@ async function fetchAndPrintReadableUrl(urlValue) {
 
   process.stdout.write(`HTTP ${response.statusCode} ${response.statusMessage}\n`);
   process.stdout.write(`Final URL: ${finalUrl.toString()}\n`);
+  process.stdout.write(`Accept: ${acceptHeader}\n`);
   process.stdout.write(
     `Cache: hits=${cacheStats.hits} misses=${cacheStats.misses} writes=${cacheStats.writes}\n`
   );
@@ -60,7 +73,7 @@ async function main(argv) {
 
   if (parsed.mode === "url") {
     try {
-      await fetchAndPrintReadableUrl(parsed.url);
+      await fetchAndPrintReadableUrl(parsed.url, parsed.acceptMode || "auto");
       return 0;
     } catch (error) {
       process.stderr.write(`Request failed: ${error.message}\n`);
@@ -82,7 +95,7 @@ async function main(argv) {
 
         const selected = results[parsed.openIndex - 1];
         process.stdout.write(`Opening result #${parsed.openIndex}: ${selected.url}\n\n`);
-        await fetchAndPrintReadableUrl(selected.url);
+        await fetchAndPrintReadableUrl(selected.url, parsed.acceptMode || "auto");
         //  https://support.google.com/websearch/answer/464?hl=en
         return 0;
       }

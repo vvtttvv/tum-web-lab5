@@ -51,9 +51,32 @@ function htmlToReadableText(html) {
   return deduped.join("\n");
 }
 
-function toHumanReadableText(text, contentType) {
+function jsonToReadableText(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return normalizeConsoleText(text).trim();
+  }
+}
+
+function toHumanReadableText(text, contentType, acceptMode = "auto") {
   const normalized = normalizeConsoleText(text);
-  if ((contentType || "").toLowerCase().includes("text/html")) {
+  const lowerContentType = (contentType || "").toLowerCase();
+
+  if (acceptMode === "json") {
+    return jsonToReadableText(normalized);
+  }
+
+  if (acceptMode === "html") {
+    return htmlToReadableText(normalized);
+  }
+
+  if (lowerContentType.includes("application/json")) {
+    return jsonToReadableText(normalized);
+  }
+
+  if (lowerContentType.includes("text/html")) {
     return htmlToReadableText(normalized);
   }
 
