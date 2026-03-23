@@ -4,6 +4,8 @@ const net = require("net");
 const tls = require("tls");
 const { parseHttpResponse } = require("./response");
 
+const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
+
 function normalizeUrl(input) {
   const candidate = /^https?:\/\//i.test(input) ? input : `http://${input}`;
   const parsed = new URL(candidate);
@@ -91,7 +93,59 @@ function makeSocketRequest(urlObj, timeoutMs = 15000) {
   });
 }
 
+function resolveRedirectUrl(currentUrl, locationHeader) {
+  if (!locationHeader) {
+    throw new Error("Redirect response is missing Location header.");
+  }
+
+  const locationValue = locationHeader.trim();
+  return new URL(locationValue, currentUrl);
+}
+
+async function fetchWithRedirects(initialUrl, options = {}) {
+  const maxRedirects = Number.isFinite(options.maxRedirects) ? options.maxRedirects : 5;
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 15000;
+
+  let currentUrl = initialUrl;
+  const visited = new Set();
+  const redirectChain = [];
+
+  for (let step = 0; step <= maxRedirects; step += 1) {
+    const normalized = currentUrl.toString();
+    if (visited.has(normalized)) {
+      throw new Error(`Redirect loop detected at ${normalized}`);
+    }
+    visited.add(normalized);
+
+    const response = await makeSocketRequest(currentUrl, timeoutMs);
+    const locationHeader = response.headers.location;
+
+    if (!REDIRECT_STATUS_CODES.has(response.statusCode)) {
+      return {
+        response,
+        finalUrl: currentUrl,
+        redirectChain,
+      };
+    }
+
+    if (step === maxRedirects) {
+      throw new Error(`Too many redirects (limit: ${maxRedirects}).`);
+    }
+
+    const nextUrl = resolveRedirectUrl(currentUrl, locationHeader);
+    redirectChain.push({
+      from: currentUrl.toString(),
+      to: nextUrl.toString(),
+      statusCode: response.statusCode,
+    });
+    currentUrl = nextUrl;
+  }
+
+  throw new Error("Unexpected redirect state.");
+}
+
 module.exports = {
+  fetchWithRedirects,
   makeSocketRequest,
   normalizeUrl,
 };

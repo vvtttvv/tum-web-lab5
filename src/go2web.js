@@ -1,6 +1,6 @@
 "use strict";
 const { HELP_TEXT, parseArgs } = require("./cli/args");
-const { makeSocketRequest, normalizeUrl } = require("./http/request");
+const { fetchWithRedirects, normalizeUrl } = require("./http/request");
 const { decodeBodyToText } = require("./http/response");
 const { toHumanReadableText } = require("./output/text");
 const { searchTop10 } = require("./search/duckduckgo");
@@ -12,11 +12,22 @@ function printHelp() {
 
 async function fetchAndPrintReadableUrl(urlValue) {
   const urlObj = normalizeUrl(urlValue);
-  const response = await makeSocketRequest(urlObj);
+  const { response, finalUrl, redirectChain } = await fetchWithRedirects(urlObj, {
+    maxRedirects: 7,
+    timeoutMs: 15000,
+  });
   const textBody = decodeBodyToText(response);
   const output = toHumanReadableText(textBody, response.headers["content-type"]);
 
+  if (redirectChain.length > 0) {
+    for (const hop of redirectChain) {
+      process.stdout.write(`Redirect ${hop.statusCode}: ${hop.from} -> ${hop.to}\n`);
+    }
+    process.stdout.write("\n");
+  }
+
   process.stdout.write(`HTTP ${response.statusCode} ${response.statusMessage}\n`);
+  process.stdout.write(`Final URL: ${finalUrl.toString()}\n`);
   process.stdout.write("\n");
   process.stdout.write(output);
   process.stdout.write("\n");
